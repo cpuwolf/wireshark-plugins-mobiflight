@@ -31,7 +31,7 @@ local function is_likely_usb_urb(buffer)
 end
 
 local function is_in_bulk_complete(buffer)
-    if buffer:len() < 16 then return false end
+    if buffer:len() < 59 then return false end
 
     local urb_type = buffer(0x0, 1):uint()
     local endpoint = buffer(0x15, 1):uint()
@@ -46,7 +46,8 @@ local function get_usb_transfer_info(buffer)
     return {
         bus = buffer(0x11, 2):uint(),
         device = buffer(0x13, 2):uint(),
-        endpoint = buffer(0x15, 1):uint()
+        endpoint = buffer(0x15, 1):uint(),
+        irp = buffer(0x10, 1):uint()
     }
 end
 
@@ -63,13 +64,13 @@ end
 
 -- Reassembly logic
 local function reassemble_bulk_in_packets(buffer, pinfo, tree)
-    if not is_in_bulk_complete(buffer) then return nil end
+    --if not is_in_bulk_complete(buffer) then return nil end
 
     local usb_info = get_usb_transfer_info(buffer)
     local data, data_len = extract_urb_data(buffer)
     if not data then return nil end
 
-    local session_key = string.format("%d:%d:0x%02x", usb_info.bus, usb_info.device, usb_info.endpoint)
+    local session_key = string.format("%d:%d:0x%02x:%d", usb_info.bus, usb_info.device, usb_info.endpoint, usb_info.irp)
 
     if not reassembly_sessions[session_key] then
         current_transfer_id = current_transfer_id + 1
@@ -78,7 +79,7 @@ local function reassemble_bulk_in_packets(buffer, pinfo, tree)
             fragment_count = 0,
             total_length = 0,
             transfer_id = current_transfer_id,
-            max_packet_size = 64
+            max_packet_size = 59
         }
     end
 
@@ -87,12 +88,8 @@ local function reassemble_bulk_in_packets(buffer, pinfo, tree)
     session.fragment_count = session.fragment_count + 1
     session.total_length = session.total_length + data_len
 
-    if data_len > session.max_packet_size then
-        session.max_packet_size = data_len
-    end
-
     -- Check for transfer completion (short packet)
-    local is_complete = (data_len < session.max_packet_size)
+    local is_complete = buffer(buffer:len() - 1, 1):uint() == 0x0a
 
     if is_complete then
         local reassembly_tree = tree:add(usb_bulk_reassembler, buffer(), "USB IN URB Bulk Reassembly")
@@ -155,7 +152,6 @@ end
 
 -- Main dissector function
 function usb_bulk_reassembler.dissector(buffer, pinfo, tree)
-    
     -- Only process packets that look like USB URB
     if not is_likely_usb_urb(buffer) then return end
 
@@ -177,7 +173,7 @@ local function register_dissector()
             return
         end
     end
-    ]]--
+    ]] --
 
     -- Method 2: Register as post-dissector (will run on all packets)
     register_postdissector(usb_bulk_reassembler)
