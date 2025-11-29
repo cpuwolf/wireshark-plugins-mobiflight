@@ -5,6 +5,8 @@
 
 -- Create a new protocol
 local my_usb_proto = Proto("MF", "MobiFlight Serial Protocol")
+-- Define a field extractor for the endpoint field
+local usb_endpoint_field = Field.new("usb.endpoint_address")
 
 -- Define fields for the protocol
 local field_group = {}
@@ -85,11 +87,23 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
             subtree:add(field_group[i], v)
         end
     end
-    -- Extract and add fields to the dissection tree
-    --subtree:add(field_group[1], buffer(0, 1))           -- Assuming Field 1 is 1 byte at offset 0
-    --subtree:add(field_group[2], buffer(1, 10):string()) -- Assuming Field 2 is a string of 10 bytes at offset 1
 
-    pinfo.cols.protocol = "USB MF" -- Set the protocol column in Wireshark
+
+    -- Inside your dissector function:
+    local endpoint_value = usb_endpoint_field()
+    if endpoint_value ~= nil then
+        -- Check the direction bit (0x80)
+        local direction_in = bit.band(endpoint_value.value, 0x80) == 0x80
+        if direction_in then
+            -- Handle Device to Host (IN) direction
+            pinfo.cols.protocol = "USB MF (IN)" -- Set the protocol column in Wireshark
+        else
+            -- Handle Host to Device (OUT) direction
+            pinfo.cols.protocol = "USB MF (OUT)" -- Set the protocol column in Wireshark
+        end
+    end
+
+    
 end
 
 -- Register the dissector to be called for USB bulk transfers
