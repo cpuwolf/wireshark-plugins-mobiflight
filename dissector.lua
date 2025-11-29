@@ -117,20 +117,16 @@ end
 function cmdid_10_handle(parts, pinfo, subtree)
     for i = 2, #parts do
         local v = parts[i]
-        if i == 2 then
-            local field2tree = subtree:add(field_group[i], " (" .. v .. ")")
-            local devicetypes = mfsplitdot(v)
-            for j, dt in ipairs(devicetypes) do
-                if j == 1 then
-                    local devicetypid = tonumber(dt)
-                    local devicetypestr = ParseDeviceType(devicetypid)
-                    field2tree:add(field_group[5], devicetypestr .. " (" .. dt .. ")")
-                else
-                    field2tree:add(field_group[5], dt)
-                end
+        local field2tree = subtree:add(field_group[i], " (" .. v .. ")")
+        local devicetypes = mfsplitdot(v)
+        for j, dt in ipairs(devicetypes) do
+            if j == 1 then
+                local devicetypid = tonumber(dt)
+                local devicetypestr = ParseDeviceType(devicetypid)
+                field2tree:add(field_group[5], devicetypestr .. " (" .. dt .. ")")
+            else
+                field2tree:add(field_group[5], dt)
             end
-        else
-            subtree:add(field_group[i], v)
         end
     end
 end
