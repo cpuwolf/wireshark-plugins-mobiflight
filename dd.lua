@@ -21,7 +21,7 @@ local function is_likely_usb_urb(buffer)
     if buffer:len() < 16 then return false end
 
     local urb_type = buffer(0, 1):uint()
-    local valid_types = { 0x1b } -- SUBMIT, COMPLETE, ERROR
+    local valid_types = { 0x1b }
 
     for _, v in ipairs(valid_types) do
         if urb_type == v then return true end
@@ -51,8 +51,7 @@ local function get_usb_transfer_info(buffer)
 end
 
 local function extract_urb_data(buffer)
-    local setup_flag = buffer(7, 1):uint()
-    local data_offset = (setup_flag == 0x01) and 24 or 16
+    local data_offset = 0x1B
 
     if buffer:len() <= data_offset then
         return nil, 0
@@ -104,7 +103,7 @@ local function reassemble_bulk_in_packets(buffer, pinfo, tree)
         reassembly_tree:add(f_transfer_id, session.transfer_id)
 
         local reassembled_tvb = session.buffer:tvb("Reassembled Data")
-        --reassembly_tree:add(f_reassembled_data, reassembled_tvb)
+        reassembly_tree:add(f_reassembled_data, reassembled_tvb:range(), "Reassembled Payload")
 
         -- Parse the data
         --parse_reassembled_data(reassembled_tvb, reassembly_tree)
