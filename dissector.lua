@@ -7,9 +7,10 @@ local my_usb_proto = Proto("MF", "MobiFlight Serial Protocol")
 -- Define fields for the protocol
 local field_group = {}
 --field_group[1] = ProtoField.uint8("myusb.field1", "Field 1", base.HEX)
-field_group[1] = ProtoField.string("myusb.field1", "Field 2")
+field_group[1] = ProtoField.string("myusb.field1", "Field 1")
 field_group[2] = ProtoField.string("myusb.field2", "Field 2")
-
+field_group[3] = ProtoField.string("myusb.field3", "Field 3")
+field_group[4] = ProtoField.string("myusb.field4", "Field 4")
 my_usb_proto.fields = field_group
 
 function mfsplit(inputString)
