@@ -15,6 +15,8 @@ field_group[1] = ProtoField.string("myusb.field1", "Command Id")
 field_group[2] = ProtoField.string("myusb.field2", "Field 2")
 field_group[3] = ProtoField.string("myusb.field3", "Field 3")
 field_group[4] = ProtoField.string("myusb.field4", "Field 4")
+
+field_group[5] = ProtoField.string("myusb.deviceinfo", "deviceinfo")
 my_usb_proto.fields = field_group
 
 
@@ -112,6 +114,27 @@ function mfsplitdot(inputString)
     return result
 end
 
+function cmdid_10_handle(parts, pinfo, subtree)
+    for i = 2, #parts do
+        local v = parts[i]
+        if i == 2 then
+            local field2tree = subtree:add(field_group[i], " (" .. v .. ")")
+            local devicetypes = mfsplitdot(v)
+            for j, dt in ipairs(devicetypes) do
+                if j == 1 then
+                    local devicetypid = tonumber(dt)
+                    local devicetypestr = ParseDeviceType(devicetypid)
+                    field2tree:add(field_group[5], devicetypestr .. " (" .. dt .. ")")
+                else
+                    field2tree:add(field_group[5], dt)
+                end
+            end
+        else
+            subtree:add(field_group[i], v)
+        end
+    end
+end
+
 -- Dissector function
 function my_usb_proto.dissector(buffer, pinfo, tree)
     local subtree = tree:add(my_usb_proto, buffer(), "MobiFlight cpuwolf Protocol")
@@ -129,27 +152,15 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
                 return
             end
             subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
-        elseif i == 2 then
-            local field2tree = subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
             -- Command Id == Info
             if cmdidnum == 10 then
-                local devicetypes = mfsplitdot(v)
-                for j, dt in ipairs(devicetypes) do
-                    if j == 1 then
-                        local devicetypid = tonumber(dt)
-                        local devicetypestr = ParseDeviceType(devicetypid)
-                        field2tree:add(field_group[i], devicetypestr .. " (" .. dt .. ")")
-                    else
-                        field2tree:add(field_group[i], dt)
-                    end
-                    
-                end
+                cmdid_10_handle(parts, pinfo, subtree)
+                break
             end
         else
             subtree:add(field_group[i], v)
         end
     end
-
 
     -- Inside your dissector function:
     local endpoint_value = usb_endpoint_field()
