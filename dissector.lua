@@ -96,12 +96,14 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
         local direction_in = bit.band(endpoint_value.value, 0x80) == 0x80
         if direction_in then
             -- Handle Device to Host (IN) direction
-            pinfo.cols.protocol = "USB MF (IN)" -- Set the protocol column in Wireshark
+            pinfo.cols.info:set("USB MF (IN)") -- Set the protocol column in Wireshark
         else
             -- Handle Host to Device (OUT) direction
-            pinfo.cols.protocol = "USB MF (OUT)" -- Set the protocol column in Wireshark
+            pinfo.cols.info:set("USB MF (OUT)") -- Set the protocol column in Wireshark
         end
     end
+
+    pinfo.cols.protocol = "USB MF"
 
     
 end
