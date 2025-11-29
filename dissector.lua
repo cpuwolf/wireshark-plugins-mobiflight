@@ -76,13 +76,19 @@ end
 -- Dissector function
 function my_usb_proto.dissector(buffer, pinfo, tree)
     local subtree = tree:add(my_usb_proto, buffer(), "MobiFlight cpuwolf Protocol")
+    local cmdstring = ""
 
     local parts = mfsplit(buffer():string())
     for i, v in ipairs(parts) do
         print(v)
         if i == 1 then
             local num = tonumber(v)
-            subtree:add(field_group[i], ParseCommandId(num) .. " (" .. v .. ")")
+            cmdstring = ParseCommandId(num)
+            if cmdstring == "" then
+                -- No matches Command Id
+                return
+            end
+            subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
         else
             subtree:add(field_group[i], v)
         end
@@ -96,10 +102,10 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
         local direction_in = bit.band(endpoint_value.value, 0x80) == 0x80
         if direction_in then
             -- Handle Device to Host (IN) direction
-            pinfo.cols.info:set("USB MF (IN)") -- Set the protocol column in Wireshark
+            pinfo.cols.info:set("USB MF (IN) " .. cmdstring) -- Set the protocol column in Wireshark
         else
             -- Handle Host to Device (OUT) direction
-            pinfo.cols.info:set("USB MF (OUT)") -- Set the protocol column in Wireshark
+            pinfo.cols.info:set("USB MF (OUT) " .. cmdstring) -- Set the protocol column in Wireshark
         end
     end
 
