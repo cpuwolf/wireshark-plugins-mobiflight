@@ -12,11 +12,12 @@ local usb_endpoint_field = Field.new("usb.endpoint_address")
 local field_group = {}
 --field_group[1] = ProtoField.uint8("myusb.field1", "Field 1", base.HEX)
 field_group[1] = ProtoField.string("myusb.field1", "Command Id")
-field_group[2] = ProtoField.string("myusb.field2", "Field 2")
-field_group[3] = ProtoField.string("myusb.field3", "Field 3")
-field_group[4] = ProtoField.string("myusb.field4", "Field 4")
 
-field_group[5] = ProtoField.string("myusb.deviceinfo", "deviceinfo")
+for i = 2, 10 do
+    field_group[i] = ProtoField.string("myusb.field" .. tostring(i), "Field" .. tostring(i))
+end
+
+field_group[11] = ProtoField.string("myusb.deviceinfo", "deviceinfo")
 my_usb_proto.fields = field_group
 
 
@@ -123,12 +124,20 @@ function cmdid_10_handle(parts, pinfo, subtree)
             if j == 1 then
                 local devicetypid = tonumber(dt)
                 local devicetypestr = ParseDeviceType(devicetypid)
-                field2tree:add(field_group[5], devicetypestr .. " (" .. dt .. ")")
+                field2tree:add(field_group[11], devicetypestr .. " (" .. dt .. ")")
             else
-                field2tree:add(field_group[5], dt)
+                field2tree:add(field_group[11], dt)
             end
         end
     end
+end
+
+function is_ascii_only(str)
+    -- The pattern '[^%c%g%s]' matches any character that is NOT a control character (%c),
+    -- a graphical character (%g), or a space character (%s).
+    -- This effectively checks for characters outside the standard ASCII range (0-127).
+    -- If such a character is found, string.find will return a position, otherwise nil.
+    return not str:find('[^%c%g%s]')
 end
 
 -- Dissector function
@@ -137,15 +146,18 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
     local cmdstring = ""
     local cmdidnum = 0
 
+    if not is_ascii_only(buffer():string()) then
+        -- MF communication uses all ascii
+        return
+    end
+
     local parts = mfsplit(buffer():string())
     for i, v in ipairs(parts) do
-        print(v)
         if i == 1 then
             cmdidnum = tonumber(v)
             cmdstring = ParseCommandId(cmdidnum)
             if cmdstring == "" then
                 -- No matches Command Id
-                return
             end
             subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
             -- Command Id == Info
