@@ -64,10 +64,40 @@ function ParseCommandId(NumCommandId)
     return ""
 end
 
+local DeviceTypeTable =
+{
+    [0] = "NotSet",
+    [1] = "Button",
+    [2] = "EncoderSingleDetent",
+    [3] = "Output",
+    [4] = "LedModuleDeprecated",
+    [5] = "StepperDeprecatedV1",
+    [6] = "Servo",
+    [7] = "LcdDisplay",
+    [8] = "Encoder",
+    [9] = "StepperDeprecatedV2",
+    [10] = "ShiftRegister",
+    [11] = "AnalogInput",
+    [12] = "InputShiftRegister",
+    [13] = "MultiplexerDriver",
+    [14] = "InputMultiplexer",
+    [15] = "Stepper",
+    [16] = "LedModule",
+    [17] = "CustomDevice",
+}
+
+function ParseDeviceType(NumDeviceType)
+    local str = CommandIdTable[NumDeviceType]
+    if str ~= nil then
+        return str
+    end
+    return ""
+end
+
 function mfsplit(inputString)
     local result = {}
     -- Pattern matches sequences of characters that are not ',' or ';'
-    for match in inputString:gmatch("([^%;,]+)") do
+    for match in inputString:gmatch("([^%;,:]+)") do
         table.insert(result, match)
     end
     return result
@@ -89,6 +119,9 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
                 return
             end
             subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
+            -- Command Id == Info
+            if num == 10 then
+            end
         else
             subtree:add(field_group[i], v)
         end
@@ -110,8 +143,6 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
     end
 
     pinfo.cols.protocol = "USB MF"
-
-    
 end
 
 -- Register the dissector to be called for USB bulk transfers
