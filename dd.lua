@@ -33,19 +33,19 @@ end
 local function is_in_bulk_complete(buffer)
     if buffer:len() < 16 then return false end
 
-    local urb_type = buffer(0, 1):uint()
-    local endpoint = buffer(3, 1):uint()
-    local transfer_type = buffer(4, 1):uint()
+    local urb_type = buffer(0x0, 1):uint()
+    local endpoint = buffer(0x15, 1):uint()
+    local transfer_type = buffer(0x16, 1):uint()
     local direction = bit.band(endpoint, 0x80)
 
-    return (urb_type == 0x43 and direction == 0x80 and transfer_type == 0x02)
+    return (urb_type == 0x1b and direction == 0x80 and transfer_type == 0x03)
 end
 
 local function get_usb_transfer_info(buffer)
     return {
-        bus = buffer(5, 1):uint(),
-        device = buffer(6, 1):uint(),
-        endpoint = buffer(3, 1):uint()
+        bus = buffer(0x11, 2):uint(),
+        device = buffer(0x13, 2):uint(),
+        endpoint = buffer(0x15, 1):uint()
     }
 end
 
@@ -103,10 +103,10 @@ local function reassemble_bulk_in_packets(buffer, pinfo, tree)
         reassembly_tree:add(f_transfer_id, session.transfer_id)
 
         local reassembled_tvb = session.buffer:tvb("Reassembled Data")
-        reassembly_tree:add(f_reassembled_data, reassembled_tvb)
+        --reassembly_tree:add(f_reassembled_data, reassembled_tvb)
 
         -- Parse the data
-        parse_reassembled_data(reassembled_tvb, reassembly_tree)
+        --parse_reassembled_data(reassembled_tvb, reassembly_tree)
 
         pinfo.cols.protocol = "USB-BULK-IN"
         pinfo.cols.info:set(string.format("Transfer %d: %d bytes", session.transfer_id, session.total_length))
