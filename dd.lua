@@ -116,6 +116,8 @@ local function reassemble_bulk_in_packets(buffer, pinfo, tree)
         progress_tree:add(f_fragment_count, session.fragment_count)
         progress_tree:add(f_message_length, session.total_length)
         progress_tree:add(f_transfer_id, session.transfer_id)
+
+        pinfo.cols.protocol = "USB-BULK-IN"
     end
 
     return nil
