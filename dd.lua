@@ -36,9 +36,10 @@ local function is_in_bulk_complete(buffer)
     local urb_type = buffer(0x0, 1):uint()
     local endpoint = buffer(0x15, 1):uint()
     local transfer_type = buffer(0x16, 1):uint()
+    local irp = buffer(0x10, 1):uint()
     local direction = bit.band(endpoint, 0x80)
 
-    return (urb_type == 0x1b and direction == 0x80 and transfer_type == 0x03)
+    return (urb_type == 0x1b and direction == 0x80 and transfer_type == 0x03 and irp == 0x1)
 end
 
 local function get_usb_transfer_info(buffer)
