@@ -87,7 +87,7 @@ local DeviceTypeTable =
 }
 
 function ParseDeviceType(NumDeviceType)
-    local str = CommandIdTable[NumDeviceType]
+    local str = DeviceTypeTable[NumDeviceType]
     if str ~= nil then
         return str
     end
@@ -96,8 +96,17 @@ end
 
 function mfsplit(inputString)
     local result = {}
-    -- Pattern matches sequences of characters that are not ',' or ';'
+    -- Pattern matches sequences of characters that are not ',' or ';' or ':'
     for match in inputString:gmatch("([^%;,:]+)") do
+        table.insert(result, match)
+    end
+    return result
+end
+
+function mfsplitdot(inputString)
+    local result = {}
+    -- Pattern matches sequences of characters that are not '.'
+    for match in inputString:gmatch("([^%.]+)") do
         table.insert(result, match)
     end
     return result
@@ -107,20 +116,34 @@ end
 function my_usb_proto.dissector(buffer, pinfo, tree)
     local subtree = tree:add(my_usb_proto, buffer(), "MobiFlight cpuwolf Protocol")
     local cmdstring = ""
+    local cmdidnum = 0
 
     local parts = mfsplit(buffer():string())
     for i, v in ipairs(parts) do
         print(v)
         if i == 1 then
-            local num = tonumber(v)
-            cmdstring = ParseCommandId(num)
+            cmdidnum = tonumber(v)
+            cmdstring = ParseCommandId(cmdidnum)
             if cmdstring == "" then
                 -- No matches Command Id
                 return
             end
             subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
+        elseif i == 2 then
+            local field2tree = subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
             -- Command Id == Info
-            if num == 10 then
+            if cmdidnum == 10 then
+                local devicetypes = mfsplitdot(v)
+                for j, dt in ipairs(devicetypes) do
+                    if j == 1 then
+                        local devicetypid = tonumber(dt)
+                        local devicetypestr = ParseDeviceType(devicetypid)
+                        field2tree:add(field_group[i], devicetypestr .. " (" .. dt .. ")")
+                    else
+                        field2tree:add(field_group[i], dt)
+                    end
+                    
+                end
             end
         else
             subtree:add(field_group[i], v)
