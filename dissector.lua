@@ -4,20 +4,35 @@
 
 
 -- Create a new protocol
-local my_usb_proto = Proto("MF", "MobiFlight Serial Protocol")
+local my_usb_proto = Proto("MobiFlight", "MobiFlight Serial Protocol")
 -- Define a field extractor for the endpoint field
 local usb_endpoint_field = Field.new("usb.endpoint_address")
 
 -- Define fields for the protocol
 local field_group = {}
 --field_group[1] = ProtoField.uint8("myusb.field1", "Field 1", base.HEX)
-field_group[1] = ProtoField.string("myusb.field1", "Command Id")
+field_group[1] = ProtoField.string("MobiFlight.field1", "Command Id")
 
 for i = 2, 10 do
-    field_group[i] = ProtoField.string("myusb.field" .. tostring(i), "Field" .. tostring(i))
+    field_group[i] = ProtoField.string("MobiFlight.field" .. tostring(i), "Field" .. tostring(i))
 end
 
-field_group[11] = ProtoField.string("myusb.deviceinfo", "deviceinfo")
+field_group[11] = ProtoField.string("MobiFlight.deviceinfo", "deviceinfo")
+
+
+-- Fields for merged packets
+local f_merged_data = ProtoField.bytes("MobiFlight.data", "Merged Data")
+local f_packet_count = ProtoField.uint16("MobiFlight.packet_count", "Packet Count")
+local f_total_length = ProtoField.uint32("MobiFlight.total_length", "Total Length")
+local f_sequence = ProtoField.uint16("MobiFlight.sequence", "Sequence Number")
+local f_direction = ProtoField.string("MobiFlight.direction", "Direction")
+
+field_group[15] = f_merged_data
+field_group[16] = f_packet_count
+field_group[17] = f_total_length
+field_group[18] = f_sequence
+field_group[19] = f_direction
+
 my_usb_proto.fields = field_group
 
 
@@ -140,6 +155,87 @@ function is_ascii_only(str)
     return not str:find('[^%c%g%s]')
 end
 
+
+-- Global table to store merged packets
+local merged_sessions = {}
+
+-- Session key generator
+local function get_session_key(bus, device, endpoint, direction)
+    return string.format("%d:%d:%d:%s", bus, device, endpoint, direction)
+end
+
+-- Packet merging function
+local function merge_usb_packets(buffer, pinfo, tree)
+    local bus = buffer(5, 1):uint()
+    local device = buffer(6, 1):uint()
+    local endpoint = buffer(3, 1):uint()
+    local direction = (bit.band(endpoint, 0x80) == 0x80) and "IN" or "OUT"
+    local urb_type = buffer(0, 1):uint()
+
+    -- Only process URB_BULK for IN
+    if not direction == "IN" and urb_type == 0x03 then
+        return nil
+    end
+
+    local session_key = get_session_key(bus, device, endpoint, direction)
+    local data_offset = (buffer(7, 1):uint() == 0x01) and 24 or 16
+    local packet_data = buffer(data_offset):bytes()
+
+    if not merged_sessions[session_key] then
+        merged_sessions[session_key] = {
+            packets = {},
+            total_length = 0,
+            start_time = pinfo.abs_ts,
+            sequence = 0
+        }
+    end
+
+    local session = merged_sessions[session_key]
+    table.insert(session.packets, {
+        data = packet_data,
+        timestamp = pinfo.abs_ts,
+        number = pinfo.number
+    })
+    session.total_length = session.total_length + packet_data:len()
+    session.sequence = session.sequence + 1
+
+    -- Check if we have a complete message (you can modify this condition)
+    local is_complete = false
+    if direction == "IN" then
+        -- For IN transfers, check for short packet or timeout
+        if packet_data:len() < 64 then -- Assuming max packet size is 64
+            is_complete = true
+        end
+    else
+        -- For OUT transfers, use your protocol's message boundary
+        is_complete = true -- Modify based on your protocol
+    end
+
+    if is_complete then
+        local merged_buffer = ByteArray.new()
+        for i, pkt in ipairs(session.packets) do
+            merged_buffer:append(pkt.data)
+        end
+
+        local merged_tree = tree:add(usb_merger, buffer(), "Merged USB Data")
+        merged_tree:add(f_direction, direction)
+        merged_tree:add(f_packet_count, #session.packets)
+        merged_tree:add(f_total_length, session.total_length)
+        merged_tree:add(f_sequence, session.sequence)
+
+        -- Add the merged data
+        local data_item = merged_tree:add(f_merged_data, merged_buffer:tvb(), "Complete Message")
+        data_item:append_text(" (" .. session.total_length .. " bytes from " .. #session.packets .. " packets)")
+
+        -- Clear the session
+        merged_sessions[session_key] = nil
+
+        return merged_buffer:tvb("Merged USB Data")
+    end
+
+    return nil
+end
+
 -- Dissector function
 function my_usb_proto.dissector(buffer, pinfo, tree)
     local subtree = tree:add(my_usb_proto, buffer(), "MobiFlight cpuwolf Protocol")
@@ -150,6 +246,13 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
         -- MF communication uses all ascii
         return
     end
+    --[[
+    local merged_tvb = merge_usb_packets(buffer, pinfo, tree)
+    if merged_tvb then
+        -- Set protocol column to show merged info
+        pinfo.cols.protocol = "USB MF MERGED"
+    end
+    ]]--
 
     local parts = mfsplit(buffer():string())
     for i, v in ipairs(parts) do
@@ -166,7 +269,12 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
                 break
             end
         else
-            subtree:add(field_group[i], v)
+            -- check \r\n Ending
+            if i == #parts and parts[i] == '\r\n' then
+                subtree:add(field_group[i], v, "Field End" .. " (" .. v .. ")")
+            else
+                subtree:add(field_group[i], v)
+            end
         end
     end
 
