@@ -166,6 +166,10 @@ end
 
 -- Packet merging function
 local function merge_usb_packets(buffer, pinfo, tree)
+    local hex_string = buffer:bytes():tohex()
+    print("Dumped buffer (hex): " .. hex_string)
+    do return nil end
+
     local bus = buffer(5, 1):uint()
     local device = buffer(6, 1):uint()
     local endpoint = buffer(3, 1):uint()
@@ -246,13 +250,12 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
         -- MF communication uses all ascii
         return
     end
-    --[[
+    
     local merged_tvb = merge_usb_packets(buffer, pinfo, tree)
     if merged_tvb then
         -- Set protocol column to show merged info
         pinfo.cols.protocol = "USB MF MERGED"
     end
-    ]]--
 
     local parts = mfsplit(buffer():string())
     for i, v in ipairs(parts) do
