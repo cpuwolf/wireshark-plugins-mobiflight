@@ -7,6 +7,7 @@
 local my_usb_proto = Proto("MobiFlight", "MobiFlight Serial Protocol")
 -- Define a field extractor for the endpoint field
 local usb_endpoint_field = Field.new("usb.endpoint_address")
+local usb_irp_field = Field.new("usb.irp_info.direction")
 
 -- Define fields for the protocol
 local field_group = {}
@@ -155,7 +156,6 @@ function is_ascii_only(str)
     return not str:find('[^%c%g%s]')
 end
 
-
 -- Global table to store merged packets
 local merged_sessions = {}
 
@@ -245,12 +245,15 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
     local subtree = tree:add(my_usb_proto, buffer(), "MobiFlight cpuwolf Protocol")
     local cmdstring = ""
     local cmdidnum = 0
+    local is_complete_response = true
+    local endpoint_value = usb_endpoint_field()
+    local irp_dir = usb_irp_field()
 
     if not is_ascii_only(buffer():string()) then
         -- MF communication uses all ascii
         return
     end
-    
+
     local merged_tvb = merge_usb_packets(buffer, pinfo, tree)
     if merged_tvb then
         -- Set protocol column to show merged info
@@ -267,28 +270,36 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
             end
             subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
             -- Command Id == Info
-            if cmdidnum == 10 then
+            if cmdidnum == 10 and irp_dir == 1 then
                 cmdid_10_handle(parts, pinfo, subtree)
                 break
             end
         else
             -- check \r\n Ending
             if i == #parts and parts[i] == '\r\n' then
+                is_complete_response = true
                 subtree:add(field_group[i], v, "Field End" .. " (" .. v .. ")")
             else
-                subtree:add(field_group[i], v)
+                is_complete_response = false
+                if irp_dir == 1 then
+                else
+                    subtree:add(field_group[i], v)
+                end
             end
         end
     end
 
     -- Inside your dissector function:
-    local endpoint_value = usb_endpoint_field()
     if endpoint_value ~= nil then
         -- Check the direction bit (0x80)
         local direction_in = bit.band(endpoint_value.value, 0x80) == 0x80
         if direction_in then
-            -- Handle Device to Host (IN) direction
-            pinfo.cols.info:set("USB MF (IN) " .. cmdstring) -- Set the protocol column in Wireshark
+            if not is_complete_response then
+                pinfo.cols.info:set("USB MF (IN) " .. cmdstring .. " Conti..." )
+            else
+                -- Handle Device to Host (IN) direction
+                pinfo.cols.info:set("USB MF (IN) " .. cmdstring) -- Set the protocol column in Wireshark
+            end
         else
             -- Handle Host to Device (OUT) direction
             pinfo.cols.info:set("USB MF (OUT) " .. cmdstring) -- Set the protocol column in Wireshark
