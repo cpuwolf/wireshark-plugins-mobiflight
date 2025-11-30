@@ -97,6 +97,22 @@ function IsRxCommandId(NumCommandId)
     return false
 end
 
+local EncodeChangeType =
+{
+    [0] = "LEFT",
+    [1] = "LEFT_FAST",
+    [2] = "RIGHT",
+    [3] = "RIGHT_FAST"
+}
+
+function ParseEncodeChangeType(NumEncodeChangeType)
+    local str = EncodeChangeType[NumEncodeChangeType]
+    if str ~= nil then
+        return str
+    end
+    return ""
+end
+
 local DeviceTypeTable =
 {
     [0] = "NotSet",
@@ -162,11 +178,19 @@ function mfgoodsplit(s, delimiter)
     return result
 end
 
-function cmdid_10_handle(parts, pinfo, subtree)
+function cmdid_rx_handle(parts, pinfo, subtree)
+    local cmdidnum = tonumber(parts[1])
     for i = 2, #parts do
         local v = parts[i]
-        local field2tree = subtree:add(field_group[i], " (" .. v .. ")")
+        local field2tree
         local devicetypes = mfsplitdot(v)
+
+        if cmdidnum == 6 and i == 3 then
+            local enctypestr = ParseEncodeChangeType(tonumber(v))
+            field2tree = subtree:add(field_group[i], enctypestr .. " (" .. v .. ")")
+        else
+            field2tree = subtree:add(field_group[i], " (" .. v .. ")")
+        end
 
         if i == #parts and parts[i] == '\r\n' then
             --field2tree:add(field_group[13], parts[i])
@@ -312,9 +336,8 @@ function my_parser(subtree, parts, pinfo)
             end
             subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
             -- Command Id == Info
-
             if irp_dir == 1 and IsRxCommandId(cmdidnum) then
-                cmdid_10_handle(parts, pinfo, subtree)
+                cmdid_rx_handle(parts, pinfo, subtree)
                 break
             end
         else
