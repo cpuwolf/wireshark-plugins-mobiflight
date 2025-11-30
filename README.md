@@ -1,8 +1,15 @@
 push lua files into
-'''
+
+```
 C:\Users\<account name>\AppData\Roaming\Wireshark\plugins
-'''
+```
 
 relaunch Wireshark
 
 ![arch](img/MF_USB_decode.gif)
+
+Wireshark Filter
+
+```
+_ws.col.protocol == "USB"
+```
