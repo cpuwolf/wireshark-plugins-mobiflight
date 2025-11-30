@@ -272,13 +272,17 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
     end
 
 
-    local merged_tvb = merge_usb_packets(buffer, pinfo, tree)
-    if merged_tvb then
+    local parts = mfsplit(buffer():string())
+
+    local merged_buffer = merge_usb_packets(buffer, pinfo, tree)
+    if merged_buffer then
         -- Set protocol column to show merged info
         --pinfo.cols.protocol = "USB MF MERGED"
+        parts = mfsplit(merged_buffer)
+    else
+        parts = mfsplit(buffer():string())
     end
 
-    local parts = mfsplit(buffer():string())
     for i, v in ipairs(parts) do
         if i == 1 then
             cmdidnum = tonumber(v)
@@ -312,8 +316,12 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
         if not is_complete_response then
             pinfo.cols.info:set("USB MF (IN) " .. cmdstring .. " Conti...")
         else
+            if merged_buffer then
+                pinfo.cols.info:set("USB MF (IN) " .. cmdstring .. " Merged")
+            else
             -- Handle Device to Host (IN) direction
             pinfo.cols.info:set("USB MF (IN) " .. cmdstring) -- Set the protocol column in Wireshark
+            end
         end
     else
         -- Handle Host to Device (OUT) direction
