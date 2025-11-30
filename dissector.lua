@@ -159,11 +159,6 @@ end
 
 -- Global table to store merged packets
 local merged_sessions = {}
--- Session key generator
-local function get_session_key(bus, device, endpoint, direction)
-    return string.format("%d:%d:%d:%s", bus, device, endpoint, direction)
-end
-
 
 -- Packet merging function
 local function merge_usb_packets(buffer, pinfo, tree)
@@ -220,6 +215,11 @@ local function merge_usb_packets(buffer, pinfo, tree)
                     break
                 end
             end
+        end
+
+        if merge_end_idx - merge_start_idx < 1 then
+            -- skip alone package
+            return nil
         end
 
         for i = merge_start_idx, merge_end_idx do
@@ -319,8 +319,8 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
             if merged_buffer then
                 pinfo.cols.info:set("USB MF (IN) " .. cmdstring .. " Merged")
             else
-            -- Handle Device to Host (IN) direction
-            pinfo.cols.info:set("USB MF (IN) " .. cmdstring) -- Set the protocol column in Wireshark
+                -- Handle Device to Host (IN) direction
+                pinfo.cols.info:set("USB MF (IN) " .. cmdstring) -- Set the protocol column in Wireshark
             end
         end
     else
