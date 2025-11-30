@@ -20,7 +20,8 @@ for i = 2, 10 do
 end
 
 field_group[11] = ProtoField.string("MobiFlight.deviceinfo", "deviceinfo")
-
+field_group[12] = ProtoField.string("MobiFlight.devicename", "devicename")
+field_group[13] = ProtoField.string("MobiFlight.end", "Field End")
 
 -- Fields for merged packets
 local f_merged_data = ProtoField.string("MobiFlight.data", "Merged Data")
@@ -137,13 +138,22 @@ function cmdid_10_handle(parts, pinfo, subtree)
         local v = parts[i]
         local field2tree = subtree:add(field_group[i], " (" .. v .. ")")
         local devicetypes = mfsplitdot(v)
+
+        if i == #parts and parts[i] == '\r\n' then
+            field2tree:add(field_group[13], parts[i])
+            break
+        end
         for j, dt in ipairs(devicetypes) do
             if j == 1 then
                 local devicetypid = tonumber(dt)
                 local devicetypestr = ParseDeviceType(devicetypid)
                 field2tree:add(field_group[11], devicetypestr .. " (" .. dt .. ")")
             else
-                field2tree:add(field_group[11], dt)
+                if j == #devicetypes then
+                    field2tree:add(field_group[12], '"' .. dt .. '"')
+                else
+                    field2tree:add(field_group[11], dt)
+                end
             end
         end
     end
@@ -264,7 +274,7 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
     if endpoint_value ~= nil then
         direction_in = bit.band(endpoint_value.value, 0x80) == 0x80
     end
-    local irp_dir = usb_irp_field()
+    local irp_dir = usb_irp_field().value
 
     if not is_ascii_only(buffer():string()) then
         -- MF communication uses all ascii
@@ -300,12 +310,12 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
             -- check \r\n Ending
             if i == #parts and parts[i] == '\r\n' then
                 is_complete_response = true
-                subtree:add(field_group[i], v, "Field End" .. " (" .. v .. ")")
+                subtree:add(field_group[13], "", v)
             else
                 is_complete_response = false
                 if irp_dir == 1 then
                 else
-                    subtree:add(field_group[i], v)
+                    subtree:add(field_group[i], "", v)
                 end
             end
         end
