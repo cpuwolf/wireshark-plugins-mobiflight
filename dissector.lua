@@ -240,7 +240,7 @@ local function merge_usb_packets(buffer, pinfo, tree)
 
         local merged_tree = tree:add(my_usb_proto, buffer(), "Merged USB Data")
 
-        merged_tree:add(f_packet_count, #merged_sessions)
+        merged_tree:add(f_packet_count, merge_end_idx - merge_start_idx + 1)
         --merged_tree:add(f_total_length, session.total_length)
         --merged_tree:add(f_sequence, session.sequence)
         --do return nil end
