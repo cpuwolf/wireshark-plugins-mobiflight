@@ -8,6 +8,7 @@ local my_usb_proto = Proto("MobiFlight", "MobiFlight Serial Protocol")
 -- Define a field extractor for the endpoint field
 local usb_endpoint_field = Field.new("usb.endpoint_address")
 local usb_irp_field = Field.new("usb.irp_info.direction")
+local usb_irpid_field = Field.new("frame.number")
 
 -- Define fields for the protocol
 local field_group = {}
@@ -158,7 +159,6 @@ end
 
 -- Global table to store merged packets
 local merged_sessions = {}
-
 -- Session key generator
 local function get_session_key(bus, device, endpoint, direction)
     return string.format("%d:%d:%d:%s", bus, device, endpoint, direction)
@@ -166,20 +166,36 @@ end
 
 -- Packet merging function
 local function merge_usb_packets(buffer, pinfo, tree)
-    local hex_string = buffer:bytes():tohex()
-    print("Dumped buffer (hex): " .. hex_string)
-    do return nil end
-
-    local bus = buffer(5, 1):uint()
-    local device = buffer(6, 1):uint()
-    local endpoint = buffer(3, 1):uint()
-    local direction = (bit.band(endpoint, 0x80) == 0x80) and "IN" or "OUT"
-    local urb_type = buffer(0, 1):uint()
+    local is_complete_response = true
+    local endpoint_value = usb_endpoint_field()
+    local direction_in
+    -- Check the direction bit (0x80)
+    if endpoint_value ~= nil then
+        direction_in = bit.band(endpoint_value.value, 0x80) == 0x80
+    end
+    local irp_dir = usb_irp_field().value
+    local irp_id = usb_irpid_field().value
 
     -- Only process URB_BULK for IN
-    if not direction == "IN" and urb_type == 0x03 then
+    if not direction_in or irp_dir == 0 then
         return nil
     end
+
+    local hex_string = buffer:bytes():tohex()
+    local buffer_len = buffer:bytes():len()
+    if buffer(buffer_len - 2, 1):uint() == 0x0D and buffer(buffer_len - 1, 1):uint() == 0x0A then
+        is_complete_response = true
+    else
+        is_complete_response = false
+    end
+    if not is_complete_response then
+        print("IRP (hex): " .. usb_irpid_field().value)
+        print("Dumped buffer (hex): " .. hex_string .. " " .. buffer():string())
+    end
+    
+    do return nil end
+
+
 
     local session_key = get_session_key(bus, device, endpoint, direction)
     local data_offset = (buffer(7, 1):uint() == 0x01) and 24 or 16
@@ -247,12 +263,18 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
     local cmdidnum = 0
     local is_complete_response = true
     local endpoint_value = usb_endpoint_field()
+    local direction_in
+    -- Check the direction bit (0x80)
+    if endpoint_value ~= nil then
+        direction_in = bit.band(endpoint_value.value, 0x80) == 0x80
+    end
     local irp_dir = usb_irp_field()
 
     if not is_ascii_only(buffer():string()) then
         -- MF communication uses all ascii
         return
     end
+
 
     local merged_tvb = merge_usb_packets(buffer, pinfo, tree)
     if merged_tvb then
@@ -290,21 +312,18 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
     end
 
     -- Inside your dissector function:
-    if endpoint_value ~= nil then
-        -- Check the direction bit (0x80)
-        local direction_in = bit.band(endpoint_value.value, 0x80) == 0x80
-        if direction_in then
-            if not is_complete_response then
-                pinfo.cols.info:set("USB MF (IN) " .. cmdstring .. " Conti..." )
-            else
-                -- Handle Device to Host (IN) direction
-                pinfo.cols.info:set("USB MF (IN) " .. cmdstring) -- Set the protocol column in Wireshark
-            end
+    if direction_in then
+        if not is_complete_response then
+            pinfo.cols.info:set("USB MF (IN) " .. cmdstring .. " Conti...")
         else
-            -- Handle Host to Device (OUT) direction
-            pinfo.cols.info:set("USB MF (OUT) " .. cmdstring) -- Set the protocol column in Wireshark
+            -- Handle Device to Host (IN) direction
+            pinfo.cols.info:set("USB MF (IN) " .. cmdstring) -- Set the protocol column in Wireshark
         end
+    else
+        -- Handle Host to Device (OUT) direction
+        pinfo.cols.info:set("USB MF (OUT) " .. cmdstring) -- Set the protocol column in Wireshark
     end
+
 
     pinfo.cols.protocol = "USB MF"
 end
