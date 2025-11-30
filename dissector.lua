@@ -133,6 +133,23 @@ function mfsplitdot(inputString)
     return result
 end
 
+function mfgoodsplit(s, delimiter)
+    local result = {}
+    local from = 1
+    local to = 1
+    while true do
+        to = string.find(s, delimiter, from)
+        if to then
+            table.insert(result, string.sub(s, from, to - 1))
+            from = to + string.len(delimiter)
+        else
+            table.insert(result, string.sub(s, from))
+            break
+        end
+    end
+    return result
+end
+
 function cmdid_10_handle(parts, pinfo, subtree)
     for i = 2, #parts do
         local v = parts[i]
@@ -262,9 +279,7 @@ local function merge_usb_packets(buffer, pinfo, tree)
     return nil
 end
 
--- Dissector function
-function my_usb_proto.dissector(buffer, pinfo, tree)
-    local subtree = tree:add(my_usb_proto, buffer(), "MobiFlight cpuwolf Protocol")
+function my_parser(subtree, parts, pinfo)
     local cmdstring = ""
     local cmdidnum = 0
     local is_complete_response = true
@@ -276,23 +291,6 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
     end
     local irp_dir = usb_irp_field().value
 
-    if not is_ascii_only(buffer():string()) then
-        -- MF communication uses all ascii
-        return
-    end
-
-
-    local parts = mfsplit(buffer():string())
-
-    local merged_buffer = merge_usb_packets(buffer, pinfo, tree)
-    if merged_buffer then
-        -- Set protocol column to show merged info
-        --pinfo.cols.protocol = "USB MF MERGED"
-        parts = mfsplit(merged_buffer)
-    else
-        parts = mfsplit(buffer():string())
-    end
-
     for i, v in ipairs(parts) do
         if i == 1 then
             cmdidnum = tonumber(v)
@@ -302,7 +300,7 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
             end
             subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
             -- Command Id == Info
-            if cmdidnum == 10 and irp_dir == 1 then
+            if irp_dir == 1 and cmdidnum == 10 or cmdidnum == 7 then
                 cmdid_10_handle(parts, pinfo, subtree)
                 break
             end
@@ -340,6 +338,37 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
 
 
     pinfo.cols.protocol = "USB MF"
+end
+
+-- Dissector function
+function my_usb_proto.dissector(buffer, pinfo, tree)
+    local subtree = tree:add(my_usb_proto, buffer(), "MobiFlight cpuwolf Protocol")
+    local endpoint_value = usb_endpoint_field()
+    local direction_in = false
+    -- Check the direction bit (0x80)
+    if endpoint_value ~= nil then
+        direction_in = bit.band(endpoint_value.value, 0x80) == 0x80
+    end
+    local irp_dir = usb_irp_field().value
+
+    if not is_ascii_only(buffer():string()) then
+        -- MF communication uses all ascii
+        return
+    end
+
+    local parts = mfsplit(buffer():string())
+
+    local merged_buffer = merge_usb_packets(buffer, pinfo, tree)
+    if merged_buffer then
+        local lines = mfgoodsplit(merged_buffer, '\r\n')
+        for i, ln in ipairs(lines) do
+            parts = mfsplit(ln .. '\r\n')
+            my_parser(subtree, parts, pinfo)
+        end
+    else
+        parts = mfsplit(buffer():string())
+        my_parser(subtree, parts, pinfo)
+    end
 end
 
 -- Register the dissector to be called for USB bulk transfers
