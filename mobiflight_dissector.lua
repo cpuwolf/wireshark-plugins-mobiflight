@@ -168,10 +168,16 @@ function mfgoodsplit(s, delimiter)
     while true do
         to = string.find(s, delimiter, from)
         if to then
-            table.insert(result, string.sub(s, from, to - 1))
+            local str = string.sub(s, from, to - 1)
+            if string.len(str) > 0 then
+                table.insert(result, string.sub(s, from, to - 1))
+            end
             from = to + string.len(delimiter)
         else
-            table.insert(result, string.sub(s, from))
+            local str = string.sub(s, from)
+            if string.len(str) > 0 then
+                table.insert(result, string.sub(s, from))
+            end
             break
         end
     end
@@ -399,6 +405,7 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
     if merged_buffer then
         local lines = mfgoodsplit(merged_buffer, '\r\n')
         for i, ln in ipairs(lines) do
+            -- print("-->>" .. tostring(i) .. "  " .. ln)
             parts = mfsplit(ln .. '\r\n')
             my_parser(buffer, subtree, parts, pinfo)
             pinfo.cols.info:append(" Merged")
