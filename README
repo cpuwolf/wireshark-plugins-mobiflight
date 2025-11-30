@@ -1,5 +1,7 @@
 push lua files into
+'''
 C:\Users\<account name>\AppData\Roaming\Wireshark\plugins
+'''
 
 relaunch Wireshark
 
