@@ -11,5 +11,5 @@ relaunch Wireshark
 Wireshark Filter
 
 ```
-_ws.col.protocol == "USB"
+_ws.col.protocol == "USB MF"
 ```
