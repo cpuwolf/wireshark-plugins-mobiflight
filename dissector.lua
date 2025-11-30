@@ -77,12 +77,24 @@ local CommandIdTable =
     [255] = "DebugPrint"
 }
 
+local RxCommandIdTable = { 5, 6, 7, 8, 9, 10, 28 }
+
+
 function ParseCommandId(NumCommandId)
     local str = CommandIdTable[NumCommandId]
     if str ~= nil then
         return str
     end
     return ""
+end
+
+function IsRxCommandId(NumCommandId)
+    for j, cmd in ipairs(RxCommandIdTable) do
+        if cmd == NumCommandId then
+            return true
+        end
+    end
+    return false
 end
 
 local DeviceTypeTable =
@@ -157,8 +169,8 @@ function cmdid_10_handle(parts, pinfo, subtree)
         local devicetypes = mfsplitdot(v)
 
         if i == #parts and parts[i] == '\r\n' then
-            field2tree:add(field_group[13], parts[i])
-            break
+            --field2tree:add(field_group[13], parts[i])
+            --break
         end
         for j, dt in ipairs(devicetypes) do
             if j == 1 then
@@ -300,7 +312,8 @@ function my_parser(subtree, parts, pinfo)
             end
             subtree:add(field_group[i], cmdstring .. " (" .. v .. ")")
             -- Command Id == Info
-            if irp_dir == 1 and cmdidnum == 10 or cmdidnum == 7 then
+
+            if irp_dir == 1 and IsRxCommandId(cmdidnum) then
                 cmdid_10_handle(parts, pinfo, subtree)
                 break
             end
@@ -324,12 +337,8 @@ function my_parser(subtree, parts, pinfo)
         if not is_complete_response then
             pinfo.cols.info:set("USB MF (IN) " .. cmdstring .. " Conti...")
         else
-            if merged_buffer then
-                pinfo.cols.info:set("USB MF (IN) " .. cmdstring .. " Merged")
-            else
-                -- Handle Device to Host (IN) direction
-                pinfo.cols.info:set("USB MF (IN) " .. cmdstring) -- Set the protocol column in Wireshark
-            end
+            -- Handle Device to Host (IN) direction
+            pinfo.cols.info:set("USB MF (IN) " .. cmdstring) -- Set the protocol column in Wireshark
         end
     else
         -- Handle Host to Device (OUT) direction
@@ -356,7 +365,7 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
         return
     end
 
-    local parts = mfsplit(buffer():string())
+    local parts
 
     local merged_buffer = merge_usb_packets(buffer, pinfo, tree)
     if merged_buffer then
@@ -364,6 +373,7 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
         for i, ln in ipairs(lines) do
             parts = mfsplit(ln .. '\r\n')
             my_parser(subtree, parts, pinfo)
+            pinfo.cols.info:append(" Merged")
         end
     else
         parts = mfsplit(buffer():string())
