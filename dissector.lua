@@ -164,6 +164,7 @@ local function get_session_key(bus, device, endpoint, direction)
     return string.format("%d:%d:%d:%s", bus, device, endpoint, direction)
 end
 
+local session_key = 0
 -- Packet merging function
 local function merge_usb_packets(buffer, pinfo, tree)
     local is_complete_response = true
@@ -188,18 +189,13 @@ local function merge_usb_packets(buffer, pinfo, tree)
     else
         is_complete_response = false
     end
-    if not is_complete_response then
-        print("IRP (hex): " .. usb_irpid_field().value)
-        print("Dumped buffer (hex): " .. hex_string .. " " .. buffer():string())
-    end
+
     
-    do return nil end
+    local packet_data = buffer:bytes()
 
-
-
-    local session_key = get_session_key(bus, device, endpoint, direction)
-    local data_offset = (buffer(7, 1):uint() == 0x01) and 24 or 16
-    local packet_data = buffer(data_offset):bytes()
+    if not is_complete_response and session_key == 0 then
+        session_key = irp_id
+    end
 
     if not merged_sessions[session_key] then
         merged_sessions[session_key] = {
@@ -219,38 +215,34 @@ local function merge_usb_packets(buffer, pinfo, tree)
     session.total_length = session.total_length + packet_data:len()
     session.sequence = session.sequence + 1
 
-    -- Check if we have a complete message (you can modify this condition)
-    local is_complete = false
-    if direction == "IN" then
-        -- For IN transfers, check for short packet or timeout
-        if packet_data:len() < 64 then -- Assuming max packet size is 64
-            is_complete = true
-        end
-    else
-        -- For OUT transfers, use your protocol's message boundary
-        is_complete = true -- Modify based on your protocol
-    end
 
-    if is_complete then
+    if is_complete_response then
         local merged_buffer = ByteArray.new()
         for i, pkt in ipairs(session.packets) do
             merged_buffer:append(pkt.data)
         end
 
-        local merged_tree = tree:add(usb_merger, buffer(), "Merged USB Data")
-        merged_tree:add(f_direction, direction)
+        print("Dumped Complete (hex): " .. buffer():string())
+        print("IRP (hex): " .. session_key)
+        --print("Dumped buffer (hex): " .. tostring(merged_buffer))
+        
+        local merged_tree = tree:add(my_usb_proto, buffer(), "Merged USB Data")
+        
         merged_tree:add(f_packet_count, #session.packets)
         merged_tree:add(f_total_length, session.total_length)
         merged_tree:add(f_sequence, session.sequence)
+        --do return nil end
 
         -- Add the merged data
-        local data_item = merged_tree:add(f_merged_data, merged_buffer:tvb(), "Complete Message")
+        local data_item = merged_tree:add(f_merged_data, merged_buffer:tvb():range(), "Complete Message")
         data_item:append_text(" (" .. session.total_length .. " bytes from " .. #session.packets .. " packets)")
-
+        
         -- Clear the session
         merged_sessions[session_key] = nil
-
+        session_key = 0
         return merged_buffer:tvb("Merged USB Data")
+    else
+        
     end
 
     return nil
@@ -279,7 +271,7 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
     local merged_tvb = merge_usb_packets(buffer, pinfo, tree)
     if merged_tvb then
         -- Set protocol column to show merged info
-        pinfo.cols.protocol = "USB MF MERGED"
+        --pinfo.cols.protocol = "USB MF MERGED"
     end
 
     local parts = mfsplit(buffer():string())
