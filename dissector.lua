@@ -23,7 +23,7 @@ field_group[11] = ProtoField.string("MobiFlight.deviceinfo", "deviceinfo")
 
 
 -- Fields for merged packets
-local f_merged_data = ProtoField.bytes("MobiFlight.data", "Merged Data")
+local f_merged_data = ProtoField.string("MobiFlight.data", "Merged Data")
 local f_packet_count = ProtoField.uint16("MobiFlight.packet_count", "Packet Count")
 local f_total_length = ProtoField.uint32("MobiFlight.total_length", "Total Length")
 local f_sequence = ProtoField.uint16("MobiFlight.sequence", "Sequence Number")
@@ -191,7 +191,7 @@ local function merge_usb_packets(buffer, pinfo, tree)
     end
 
     
-    local packet_data = buffer:bytes()
+    local packet_data = buffer():string()
 
     if not is_complete_response and session_key == 0 then
         session_key = irp_id
@@ -217,13 +217,11 @@ local function merge_usb_packets(buffer, pinfo, tree)
 
 
     if is_complete_response then
-        local merged_buffer = ByteArray.new()
+        local merged_buffer = ""
         for i, pkt in ipairs(session.packets) do
-            merged_buffer:append(pkt.data)
+            merged_buffer = merged_buffer .. pkt.data
         end
 
-        print("Dumped Complete (hex): " .. buffer():string())
-        print("IRP (hex): " .. session_key)
         --print("Dumped buffer (hex): " .. tostring(merged_buffer))
         
         local merged_tree = tree:add(my_usb_proto, buffer(), "Merged USB Data")
@@ -234,13 +232,15 @@ local function merge_usb_packets(buffer, pinfo, tree)
         --do return nil end
 
         -- Add the merged data
-        local data_item = merged_tree:add(f_merged_data, merged_buffer:tvb():range(), "Complete Message")
-        data_item:append_text(" (" .. session.total_length .. " bytes from " .. #session.packets .. " packets)")
+        print("Dumped Complete (hex): " .. merged_buffer)
+        print("IRP (hex): " .. session_key)
+        local data_item = merged_tree:add(f_merged_data, "", merged_buffer)
+        --data_item:append_text(" (" .. session.total_length .. " bytes from " .. #session.packets .. " packets)")
         
         -- Clear the session
         merged_sessions[session_key] = nil
         session_key = 0
-        return merged_buffer:tvb("Merged USB Data")
+        return merged_buffer
     else
         
     end
