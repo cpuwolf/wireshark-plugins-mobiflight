@@ -164,7 +164,7 @@ local function get_session_key(bus, device, endpoint, direction)
     return string.format("%d:%d:%d:%s", bus, device, endpoint, direction)
 end
 
-local session_key = 0
+
 -- Packet merging function
 local function merge_usb_packets(buffer, pinfo, tree)
     local is_complete_response = true
@@ -190,59 +190,63 @@ local function merge_usb_packets(buffer, pinfo, tree)
         is_complete_response = false
     end
 
-    
     local packet_data = buffer():string()
-
-    if not is_complete_response and session_key == 0 then
-        session_key = irp_id
-    end
-
-    if not merged_sessions[session_key] then
-        merged_sessions[session_key] = {
-            packets = {},
-            total_length = 0,
-            start_time = pinfo.abs_ts,
-            sequence = 0
-        }
-    end
+    local session_key = irp_id
 
     local session = merged_sessions[session_key]
-    table.insert(session.packets, {
+    table.insert(merged_sessions, {
         data = packet_data,
         timestamp = pinfo.abs_ts,
-        number = pinfo.number
+        number = irp_id
     })
-    session.total_length = session.total_length + packet_data:len()
-    session.sequence = session.sequence + 1
-
 
     if is_complete_response then
         local merged_buffer = ""
-        for i, pkt in ipairs(session.packets) do
-            merged_buffer = merged_buffer .. pkt.data
+        local merge_start_idx = 0
+        local merge_end_idx
+
+        -- get table end index
+        for i, pkt in ipairs(merged_sessions) do
+            if pkt.number == irp_id then
+                merge_end_idx = i
+                break
+            end
+        end
+        -- get table start index
+        if merge_end_idx > 1 then
+            for i = merge_end_idx - 1, 1, -1 do
+                if merged_sessions[i].data:match("\r\n$") ~= nil then
+                    merge_start_idx = i + 1
+                    break
+                end
+            end
+        end
+
+        for i = merge_start_idx, merge_end_idx do
+            merged_buffer = merged_buffer .. merged_sessions[i].data
         end
 
         --print("Dumped buffer (hex): " .. tostring(merged_buffer))
-        
+
         local merged_tree = tree:add(my_usb_proto, buffer(), "Merged USB Data")
-        
-        merged_tree:add(f_packet_count, #session.packets)
-        merged_tree:add(f_total_length, session.total_length)
-        merged_tree:add(f_sequence, session.sequence)
+
+        merged_tree:add(f_packet_count, #merged_sessions)
+        --merged_tree:add(f_total_length, session.total_length)
+        --merged_tree:add(f_sequence, session.sequence)
         --do return nil end
 
         -- Add the merged data
         print("Dumped Complete (hex): " .. merged_buffer)
         print("IRP (hex): " .. session_key)
-        local data_item = merged_tree:add(f_merged_data, "", merged_buffer)
+        local data_item = merged_tree:add(f_merged_data, merged_buffer)
         --data_item:append_text(" (" .. session.total_length .. " bytes from " .. #session.packets .. " packets)")
-        
+
+        --session.collectondone = true
         -- Clear the session
-        merged_sessions[session_key] = nil
-        session_key = 0
+        --merged_sessions[session_key] = nil
         return merged_buffer
     else
-        
+
     end
 
     return nil
