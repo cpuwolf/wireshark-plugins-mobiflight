@@ -1,8 +1,0 @@
-push lua files into
-'''
-C:\Users\<account name>\AppData\Roaming\Wireshark\plugins
-'''
-
-relaunch Wireshark
-
-![arch](https://github.com/cpuwolf/wireshark-plugins-mobiflight/blob/8ccca6e0049c6955218c6d8eb1af8f35b7e464bf/img/MF_USB_decode.gif?raw=true)
