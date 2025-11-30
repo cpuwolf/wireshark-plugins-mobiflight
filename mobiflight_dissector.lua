@@ -315,7 +315,7 @@ local function merge_usb_packets(buffer, pinfo, tree)
     return nil
 end
 
-function my_parser(subtree, parts, pinfo)
+function my_parser(buffer, subtree, parts, pinfo)
     local cmdstring = ""
     local cmdidnum = 0
     local is_complete_response = true
@@ -326,6 +326,13 @@ function my_parser(subtree, parts, pinfo)
         direction_in = bit.band(endpoint_value.value, 0x80) == 0x80
     end
     local irp_dir = usb_irp_field().value
+
+    local buffer_len = buffer:bytes():len()
+    if buffer(buffer_len - 2, 1):uint() == 0x0D and buffer(buffer_len - 1, 1):uint() == 0x0A then
+        is_complete_response = true
+    else
+        is_complete_response = false
+    end
 
     for i, v in ipairs(parts) do
         if i == 1 then
@@ -343,10 +350,8 @@ function my_parser(subtree, parts, pinfo)
         else
             -- check \r\n Ending
             if i == #parts and parts[i] == '\r\n' then
-                is_complete_response = true
                 subtree:add(field_group[13], "", v)
             else
-                is_complete_response = false
                 if irp_dir == 1 then
                 else
                     subtree:add(field_group[i], "", v)
@@ -395,12 +400,12 @@ function my_usb_proto.dissector(buffer, pinfo, tree)
         local lines = mfgoodsplit(merged_buffer, '\r\n')
         for i, ln in ipairs(lines) do
             parts = mfsplit(ln .. '\r\n')
-            my_parser(subtree, parts, pinfo)
+            my_parser(buffer, subtree, parts, pinfo)
             pinfo.cols.info:append(" Merged")
         end
     else
         parts = mfsplit(buffer():string())
-        my_parser(subtree, parts, pinfo)
+        my_parser(buffer, subtree, parts, pinfo)
     end
 end
 
